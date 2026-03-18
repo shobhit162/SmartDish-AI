@@ -12,6 +12,8 @@ import {
 import { getCategoryEmoji, getCountryFlag } from "@/lib/data";
 import { getDisplayCategoryName } from "@/lib/food-mode";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   // Fetch data server-side
   const recipeData = await getRecipeOfTheDay();
