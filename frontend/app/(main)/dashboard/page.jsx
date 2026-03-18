@@ -10,6 +10,7 @@ import {
   getAreas,
 } from "@/actions/mealdb.actions";
 import { getCategoryEmoji, getCountryFlag } from "@/lib/data";
+import { getDisplayCategoryName } from "@/lib/food-mode";
 
 export default async function DashboardPage() {
   // Fetch data server-side
@@ -79,7 +80,7 @@ export default async function DashboardPage() {
                         variant="outline"
                         className="border-2 border-orange-600 text-orange-700 bg-orange-50 font-bold"
                       >
-                        {recipeOfTheDay.strCategory}
+                        {getDisplayCategoryName(recipeOfTheDay.strCategory)}
                       </Badge>
                       <Badge
                         variant="outline"
@@ -140,14 +141,18 @@ export default async function DashboardPage() {
             {categories.map((category) => (
               <Link
                 key={category.strCategory}
-                href={`/recipes/category/${category.strCategory.toLowerCase()}`}
+                href={`/recipes/category/${getDisplayCategoryName(
+                  category.strCategory
+                ).toLowerCase()}`}
               >
                 <div className="bg-white p-6 border-2 border-stone-200 hover:border-orange-600 hover:shadow-lg transition-all text-center group cursor-pointer">
                   <div className="text-4xl mb-3">
-                    {getCategoryEmoji(category.strCategory)}
+                    {getCategoryEmoji(
+                      getDisplayCategoryName(category.strCategory)
+                    )}
                   </div>
                   <h3 className="font-bold text-stone-900 group-hover:text-orange-600 transition-colors text-sm">
-                    {category.strCategory}
+                    {getDisplayCategoryName(category.strCategory)}
                   </h3>
                 </div>
               </Link>

@@ -4,6 +4,15 @@ import { checkUser } from "@/lib/checkUser";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { freeMealRecommendations, proTierLimit } from "@/lib/arcjet";
 import { request } from "@arcjet/next";
+import { cookies } from "next/headers";
+import {
+  FOOD_MODE_COOKIE,
+  FOOD_MODES,
+  detectFoodTypeFromText,
+  detectRecipeFoodType,
+  isRecipeAllowedForMode,
+  normalizeFoodMode,
+} from "@/lib/food-mode";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const STRAPI_URL =
@@ -12,6 +21,12 @@ const STRAPI_API_TOKEN = process.env.STRAPI_API_TOKEN;
 const UNSPLASH_ACCESS_KEY = process.env.UNSPLASH_ACCESS_KEY;
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+async function getModeFromCookies() {
+  const cookieStore = await cookies();
+  const mode = cookieStore.get(FOOD_MODE_COOKIE)?.value;
+  return normalizeFoodMode(mode);
+}
 
 // Helper function to normalize recipe title
 function normalizeTitle(title) {
@@ -70,6 +85,7 @@ export async function getOrGenerateRecipe(formData) {
     if (!user) {
       throw new Error("User not authenticated");
     }
+    const foodMode = await getModeFromCookies();
 
     const recipeName = formData.get("recipeName");
     if (!recipeName) {
@@ -80,13 +96,24 @@ export async function getOrGenerateRecipe(formData) {
     const normalizedTitle = normalizeTitle(recipeName);
     console.log("🔍 Searching for recipe:", normalizedTitle);
 
+    if (
+      foodMode === FOOD_MODES.VEG &&
+      detectFoodTypeFromText(normalizedTitle) === FOOD_MODES.NON_VEG
+    ) {
+      throw new Error(
+        "Veg mode is enabled. Please search for a vegetarian recipe."
+      );
+    }
+
     const isPro = user.subscriptionTier === "pro";
 
     // Step 1: Check if recipe already exists in DB (case-insensitive search)
+    const foodTypeFilter =
+      foodMode === FOOD_MODES.VEG ? "&filters[foodType][$eq]=veg" : "";
     const searchResponse = await fetch(
       `${STRAPI_URL}/api/recipes?filters[title][$eqi]=${encodeURIComponent(
         normalizedTitle
-      )}&populate=*`,
+      )}${foodTypeFilter}&populate=*`,
       {
         headers: {
           Authorization: `Bearer ${STRAPI_API_TOKEN}`,
@@ -98,12 +125,16 @@ export async function getOrGenerateRecipe(formData) {
     if (searchResponse.ok) {
       const searchData = await searchResponse.json();
 
-      if (searchData.data && searchData.data.length > 0) {
-        console.log("✅ Recipe found in database:", searchData.data[0].id);
+      const matchedRecipe = (searchData.data || []).find((recipe) =>
+        isRecipeAllowedForMode(recipe, foodMode)
+      );
+
+      if (matchedRecipe) {
+        console.log("✅ Recipe found in database:", matchedRecipe.id);
 
         // Check if user has saved this recipe
         const savedRecipeResponse = await fetch(
-          `${STRAPI_URL}/api/saved-recipes?filters[user][id][$eq]=${user.id}&filters[recipe][id][$eq]=${searchData.data[0].id}`,
+          `${STRAPI_URL}/api/saved-recipes?filters[user][id][$eq]=${user.id}&filters[recipe][id][$eq]=${matchedRecipe.id}`,
           {
             headers: {
               Authorization: `Bearer ${STRAPI_API_TOKEN}`,
@@ -120,8 +151,8 @@ export async function getOrGenerateRecipe(formData) {
 
         return {
           success: true,
-          recipe: searchData.data[0],
-          recipeId: searchData.data[0].id,
+          recipe: matchedRecipe,
+          recipeId: matchedRecipe.id,
           isSaved: isSaved,
           fromDatabase: true,
           isPro,
@@ -135,8 +166,23 @@ export async function getOrGenerateRecipe(formData) {
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
+    const dietaryRules =
+      foodMode === FOOD_MODES.VEG
+        ? `
+STRICT DIET MODE: VEGETARIAN ONLY.
+- Never include meat, chicken, lamb, pork, fish, seafood, egg, or any non-veg ingredient.
+- Ingredients and tips must be strictly vegetarian.
+- If the requested dish is traditionally non-veg, create a vegetarian version with the same spirit.
+`
+        : `
+DIET MODE: NON-VEG PRIORITY.
+- Non-veg recipes are preferred.
+- Veg recipes are still allowed if they best match the request.
+`;
+
     const prompt = `
 You are a professional chef and recipe expert. Generate a detailed recipe for: "${normalizedTitle}"
+${dietaryRules}
 
 CRITICAL: The "title" field MUST be EXACTLY: "${normalizedTitle}" (no changes, no additions like "Classic" or "Easy")
 
@@ -266,6 +312,13 @@ Guidelines:
     const cuisine = validCuisines.includes(recipeData.cuisine?.toLowerCase())
       ? recipeData.cuisine.toLowerCase()
       : "other";
+    const generatedFoodType = detectRecipeFoodType(recipeData);
+
+    if (foodMode === FOOD_MODES.VEG && generatedFoodType === FOOD_MODES.NON_VEG) {
+      throw new Error(
+        "Could not generate a vegetarian-safe recipe. Please try another dish."
+      );
+    }
 
     // Step 3: Fetch image from Unsplash
     console.log("🖼️ Fetching image from Unsplash...");
@@ -287,6 +340,7 @@ Guidelines:
         tips: recipeData.tips,
         substitutions: recipeData.substitutions,
         imageUrl: imageUrl || "",
+        foodType: generatedFoodType,
         isPublic: true,
         author: user.id,
       },
@@ -322,6 +376,7 @@ Guidelines:
         title: normalizedTitle,
         category,
         cuisine,
+        foodType: generatedFoodType,
         imageUrl: imageUrl || "",
       },
       recipeId: createdRecipe.data.id,
@@ -481,6 +536,7 @@ export async function getRecipesByPantryIngredients() {
     if (!user) {
       throw new Error("User not authenticated");
     }
+    const foodMode = await getModeFromCookies();
 
     // ✅ ARCJET RATE LIMIT CHECK
     const isPro = user.subscriptionTier === "pro";
@@ -535,8 +591,22 @@ export async function getRecipesByPantryIngredients() {
 
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
+    const modeRules =
+      foodMode === FOOD_MODES.VEG
+        ? `
+STRICT DIET MODE: VEGETARIAN ONLY.
+- Do not include meat, fish, seafood, or egg.
+- Every recipe must be clearly vegetarian.
+`
+        : `
+DIET MODE: NON-VEG PRIORITY.
+- Prefer non-veg ideas first.
+- Veg ideas are allowed but should appear lower.
+`;
+
     const prompt = `
 You are a professional chef. Given these available ingredients: ${ingredients}
+${modeRules}
 
 Suggest 5 recipes that can be made primarily with these ingredients. It's okay if the recipes need 1-2 common pantry staples (salt, pepper, oil, etc.) that aren't listed.
 
@@ -580,12 +650,21 @@ Rules:
       );
     }
 
+    const modeAwareRecipes = (Array.isArray(recipeSuggestions) ? recipeSuggestions : [])
+      .filter((recipe) => isRecipeAllowedForMode(recipe, foodMode))
+      .sort((a, b) => {
+        if (foodMode === FOOD_MODES.VEG) return 0;
+        const aScore = detectRecipeFoodType(a) === FOOD_MODES.NON_VEG ? 0 : 1;
+        const bScore = detectRecipeFoodType(b) === FOOD_MODES.NON_VEG ? 0 : 1;
+        return aScore - bScore;
+      });
+
     return {
       success: true,
-      recipes: recipeSuggestions,
+      recipes: modeAwareRecipes,
       ingredientsUsed: ingredients,
       recommendationsLimit: isPro ? "unlimited" : 5,
-      message: `Found ${recipeSuggestions.length} recipes you can make!`,
+      message: `Found ${modeAwareRecipes.length} recipes you can make!`,
     };
   } catch (error) {
     console.error("❌ Error in getRecipesByPantryIngredients:", error);
@@ -600,10 +679,13 @@ export async function getSavedRecipes() {
     if (!user) {
       throw new Error("User not authenticated");
     }
+    const foodMode = await getModeFromCookies();
 
     // Fetch saved recipes with populated recipe data
+    const foodTypeQuery =
+      foodMode === FOOD_MODES.VEG ? "&filters[recipe][foodType][$eq]=veg" : "";
     const response = await fetch(
-      `${STRAPI_URL}/api/saved-recipes?filters[user][id][$eq]=${user.id}&populate[recipe][populate]=*&sort=savedAt:desc`,
+      `${STRAPI_URL}/api/saved-recipes?filters[user][id][$eq]=${user.id}${foodTypeQuery}&populate[recipe][populate]=*&sort=savedAt:desc`,
       {
         headers: {
           Authorization: `Bearer ${STRAPI_API_TOKEN}`,
@@ -619,9 +701,19 @@ export async function getSavedRecipes() {
     const data = await response.json();
 
     // Extract recipes from saved-recipes relations
-    const recipes = data.data
+    let recipes = data.data
       .map((savedRecipe) => savedRecipe.recipe)
       .filter(Boolean); // Remove any null recipes
+
+    recipes = recipes.filter((recipe) => isRecipeAllowedForMode(recipe, foodMode));
+
+    if (foodMode === FOOD_MODES.NON_VEG) {
+      recipes.sort((a, b) => {
+        const aScore = detectRecipeFoodType(a) === FOOD_MODES.NON_VEG ? 0 : 1;
+        const bScore = detectRecipeFoodType(b) === FOOD_MODES.NON_VEG ? 0 : 1;
+        return aScore - bScore;
+      });
+    }
 
     return {
       success: true,

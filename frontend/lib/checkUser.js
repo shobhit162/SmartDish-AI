@@ -56,7 +56,11 @@ export const checkUser = async () => {
         });
       }
 
-      return { ...existingUser, subscriptionTier };
+      return {
+        ...existingUser,
+        subscriptionTier,
+        foodMode: existingUser.foodMode || "non-veg",
+      };
     }
 
     // Get authenticated role
@@ -93,6 +97,7 @@ export const checkUser = async () => {
       lastName: user.lastName || "",
       imageUrl: user.imageUrl || "",
       subscriptionTier,
+      foodMode: "non-veg",
     };
 
     const newUserResponse = await fetch(`${STRAPI_URL}/api/users`, {

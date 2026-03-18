@@ -87,6 +87,14 @@
         "pro"
       ]
     },
+    "foodMode": {
+      "type": "enumeration",
+      "enum": [
+        "veg",
+        "non-veg"
+      ],
+      "default": "non-veg"
+    },
     "recipes": {
       "type": "relation",
       "relation": "oneToMany",

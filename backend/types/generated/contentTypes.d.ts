@@ -550,6 +550,8 @@ export interface ApiRecipeRecipe extends Struct.CollectionTypeSchema {
       ]
     >;
     description: Schema.Attribute.Blocks;
+    foodType: Schema.Attribute.Enumeration<['veg', 'non-veg']> &
+      Schema.Attribute.DefaultTo<'non-veg'>;
     imageUrl: Schema.Attribute.String;
     ingredients: Schema.Attribute.JSON & Schema.Attribute.Required;
     instructions: Schema.Attribute.JSON & Schema.Attribute.Required;
@@ -1085,6 +1087,8 @@ export interface PluginUsersPermissionsUser
         minLength: 6;
       }>;
     firstName: Schema.Attribute.String;
+    foodMode: Schema.Attribute.Enumeration<['veg', 'non-veg']> &
+      Schema.Attribute.DefaultTo<'non-veg'>;
     imageUrl: Schema.Attribute.String;
     lastName: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;

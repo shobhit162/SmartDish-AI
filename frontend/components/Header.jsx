@@ -9,15 +9,22 @@ import UserDropdown from "./UserDropdown";
 import PricingModal from "./PricingModal";
 import { Badge } from "./ui/badge";
 import HowToCookModal from "./HowToCookModal";
+import FoodModeSwitch from "./FoodModeSwitch";
+import { cookies } from "next/headers";
+import { FOOD_MODE_COOKIE, normalizeFoodMode } from "@/lib/food-mode";
 
 const Header = async () => {
+  const cookieStore = await cookies();
+  const initialFoodMode = normalizeFoodMode(
+    cookieStore.get(FOOD_MODE_COOKIE)?.value
+  );
   const user = await checkUser();
   return (
     <header
       className="fixed top-0 w-full border-b border-stone-200 bg-stone-50/80 backdrop-blur-md
     z-50 supports-backdrop-filter:bg-stone-50/60"
     >
-      <nav className="container mx-auto px-2 h-16 flex items-center justify-between">
+      <nav className="container mx-auto px-2 h-16 flex items-center justify-between relative">
         <Link href={user ? "/dashboard" : "/"}>
           <Image
             src="/logo2.png"
@@ -28,7 +35,7 @@ const Header = async () => {
           />
         </Link>
         {/* Navigation Links */}
-        <div className="hidden md:flex items-center space-x-8 text-sm font-medium text-stone-600">
+        <div className="hidden md:flex items-center space-x-8 text-sm font-medium text-stone-600 absolute left-1/2 -translate-x-1/2">
           <Link
             href="/recipes"
             className="hover:text-orange-600 transition-colors flex gap-1.5 items-center"
@@ -47,6 +54,7 @@ const Header = async () => {
         <div className="flex items-center space-x-4">
           {/* Show the user button when the user is signed in */}
           <SignedIn>
+            <FoodModeSwitch key={initialFoodMode} initialMode={initialFoodMode} />
             {/* How to Cook? */}
             <HowToCookModal />
 

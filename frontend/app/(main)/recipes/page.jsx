@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Bookmark, Loader2, ChefHat } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -14,9 +14,24 @@ export default function SavedRecipesPage() {
     data: recipesData,
     fn: fetchSavedRecipes,
   } = useFetch(getSavedRecipes);
+  const fetchSavedRecipesRef = useRef(fetchSavedRecipes);
 
   useEffect(() => {
-    fetchSavedRecipes();
+    fetchSavedRecipesRef.current = fetchSavedRecipes;
+  }, [fetchSavedRecipes]);
+
+  useEffect(() => {
+    fetchSavedRecipesRef.current();
+  }, []);
+
+  useEffect(() => {
+    const handleFoodModeChanged = () => {
+      fetchSavedRecipesRef.current();
+    };
+    window.addEventListener("food-mode-changed", handleFoodModeChanged);
+    return () => {
+      window.removeEventListener("food-mode-changed", handleFoodModeChanged);
+    };
   }, []);
 
   const recipes = recipesData?.recipes || [];

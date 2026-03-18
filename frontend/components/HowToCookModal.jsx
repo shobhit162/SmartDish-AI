@@ -1,7 +1,6 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChefHat, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,11 +13,38 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { FOOD_MODE_COOKIE, FOOD_MODES, normalizeFoodMode } from "@/lib/food-mode";
+
+function getCurrentFoodMode() {
+  if (typeof document === "undefined") return FOOD_MODES.NON_VEG;
+  const raw = document.cookie
+    .split("; ")
+    .find((item) => item.startsWith(`${FOOD_MODE_COOKIE}=`))
+    ?.split("=")[1];
+  return normalizeFoodMode(raw);
+}
 
 export default function HowToCookModal() {
   const router = useRouter();
   const [recipeName, setRecipeName] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const [foodMode, setFoodMode] = useState(() => getCurrentFoodMode());
+
+  useEffect(() => {
+    const handleFoodModeChanged = (event) => {
+      const nextMode = normalizeFoodMode(event?.detail?.mode);
+      setFoodMode(nextMode);
+    };
+    window.addEventListener("food-mode-changed", handleFoodModeChanged);
+    return () => {
+      window.removeEventListener("food-mode-changed", handleFoodModeChanged);
+    };
+  }, []);
+
+  const suggestionChips =
+    foodMode === FOOD_MODES.VEG
+      ? ["Paneer Butter Masala", "Veg Pulao", "Palak Paneer"]
+      : ["Chicken Biryani", "Chocolate Brownies", "Caesar Salad"];
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -71,7 +97,11 @@ export default function HowToCookModal() {
                 type="text"
                 value={recipeName}
                 onChange={(e) => setRecipeName(e.target.value)}
-                placeholder="e.g., Chicken Biryani, Chocolate Cake, Pasta Carbonara"
+                placeholder={
+                  foodMode === FOOD_MODES.VEG
+                    ? "e.g., Paneer Tikka, Veg Fried Rice, Palak Paneer"
+                    : "e.g., Chicken Biryani, Chocolate Cake, Pasta Carbonara"
+                }
                 className="w-full px-4 py-3 pr-12 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 text-stone-900 placeholder:text-stone-400"
                 autoFocus
               />
@@ -85,18 +115,16 @@ export default function HowToCookModal() {
               💡 Try These:
             </h4>
             <div className="flex flex-wrap gap-2">
-              {["Butter Chicken", "Chocolate Brownies", "Caesar Salad"].map(
-                (example) => (
-                  <button
-                    key={example}
-                    type="button"
-                    onClick={() => setRecipeName(example)}
-                    className="px-3 py-1 bg-white text-orange-700 border border-orange-200 rounded-full text-sm hover:bg-orange-100 transition-colors"
-                  >
-                    {example}
-                  </button>
-                )
-              )}
+              {suggestionChips.map((example) => (
+                <button
+                  key={example}
+                  type="button"
+                  onClick={() => setRecipeName(example)}
+                  className="px-3 py-1 bg-white text-orange-700 border border-orange-200 rounded-full text-sm hover:bg-orange-100 transition-colors"
+                >
+                  {example}
+                </button>
+              ))}
             </div>
           </div>
 

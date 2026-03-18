@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import useFetch from "@/hooks/use-fetch";
 import RecipeCard from "@/components/RecipeCard";
+import { getDisplayCategoryName } from "@/lib/food-mode";
 
 export default function RecipeGrid({
   type, // "category" or "cuisine"
@@ -13,17 +14,47 @@ export default function RecipeGrid({
   backLink = "/dashboard",
 }) {
   const { loading, data, fn: fetchMeals } = useFetch(fetchAction);
+  const fetchMealsRef = useRef(fetchMeals);
 
   useEffect(() => {
-    if (value) {
-      // Capitalize first letter for API call
-      const formattedValue = value.charAt(0).toUpperCase() + value.slice(1);
-      fetchMeals(formattedValue);
-    }
+    fetchMealsRef.current = fetchMeals;
+  }, [fetchMeals]);
+
+  const fetchByModeAwareValue = () => {
+    if (!value) return;
+    // Convert slug to API value, e.g. "saudi-arabian" -> "Saudi Arabian"
+    const formattedValue = value
+      .replace(/-/g, " ")
+      .split(" ")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+    fetchMealsRef.current(formattedValue);
+  };
+
+  useEffect(() => {
+    fetchByModeAwareValue();
+  }, [value]);
+
+  useEffect(() => {
+    const handleFoodModeChanged = () => {
+      fetchByModeAwareValue();
+    };
+    window.addEventListener("food-mode-changed", handleFoodModeChanged);
+    return () => {
+      window.removeEventListener("food-mode-changed", handleFoodModeChanged);
+    };
   }, [value]);
 
   const meals = data?.meals || [];
-  const displayName = value?.replace(/-/g, " "); // Convert "saudi-arabian" to "saudi arabian"
+  const rawDisplayName = value?.replace(/-/g, " "); // Convert "saudi-arabian" to "saudi arabian"
+  const normalizedCategoryName = rawDisplayName
+    ? rawDisplayName.charAt(0).toUpperCase() + rawDisplayName.slice(1)
+    : "";
+  const displayName =
+    type === "category"
+      ? getDisplayCategoryName(normalizedCategoryName)
+      : rawDisplayName;
 
   return (
     <div className="min-h-screen bg-stone-50 pt-14 pb-16 px-4">

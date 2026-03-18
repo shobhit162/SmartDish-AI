@@ -55,6 +55,14 @@
         "dessert"
       ]
     },
+    "foodType": {
+      "type": "enumeration",
+      "enum": [
+        "veg",
+        "non-veg"
+      ],
+      "default": "non-veg"
+    },
     "ingredients": {
       "type": "json",
       "required": true
