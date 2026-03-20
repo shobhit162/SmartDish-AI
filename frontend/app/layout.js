@@ -4,6 +4,7 @@ import Header from "@/components/Header";
 import { ClerkProvider } from '@clerk/nextjs'
 import { neobrutalism } from "@clerk/themes";
 import { Toaster } from "@/components/ui/sonner";
+import { Analytics } from '@vercel/analytics/next';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -27,6 +28,7 @@ export default function RootLayout({ children }) {
               <p className="text-stone-500 text-sm">Made with ❤️ by Shobhit Chaurasia</p>
             </div>
           </footer>
+          <Analytics />
         </body>
       </html>
     </ClerkProvider>
